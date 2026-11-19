@@ -84,8 +84,8 @@ def hoofdpagina(b: CDP, adres: str, wachttijd: float = 3.0):
     b.call("Runtime.enable")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
            deviceScaleFactor=1, mobile=False)
-    b.call("Page.navigate", {"url": adres})
-    b.call("Network.setCacheDisabled", {"cacheDisabled": True})
+    b.call("Page.navigate", url=adres)
+    b.call("Network.setCacheDisabled", cacheDisabled=True)
     tijd = time.time()
     while time.time() - tijd < 25:
         b.wacht(0.5)
@@ -158,7 +158,9 @@ def main() -> int:
             b.wacht(3)
             print("   sleuteluitslag:", str(b.js("document.querySelector('#sleutel-uitslag').textContent"))[:120])
             # Terug naar boven zodat de kop en de eerste kaarten in het beeld staan.
-            b.js("window.scrollTo(0, document.querySelector('#sleutel-open').closest('.kaart').offsetTop - 90)")
+            b.js("(() => { const k = document.querySelector('#sleutel-open').closest('.kaart');"
+                 " window.scrollTo(0, k.offsetTop - (document.querySelector('header.kop').offsetHeight + 46));"
+                 " return k.getBoundingClientRect().top; })()")
             b.wacht(0.8)
             b.schermafbeelding(str(BEELDEN / "sleutels.png"))
 
@@ -170,7 +172,9 @@ def main() -> int:
         gemeten = b.js("window.innerWidth")
         print("   gemeten breedte:", gemeten)
         b.schermafbeelding(str(BEELDEN / "bord-telefoon.png"))
-        b.js("window.scrollTo(0, document.querySelector('#sleutel-open').closest('.kaart').offsetTop - 90)")
+        b.js("(() => { const k = document.querySelector('#sleutel-open').closest('.kaart');"
+             " window.scrollTo(0, k.offsetTop - (document.querySelector('header.kop').offsetHeight + 30));"
+             " return k.getBoundingClientRect().top; })()")
         b.wacht(0.8)
         b.schermafbeelding(str(BEELDEN / "bord-telefoon-sleutels.png"))
         print("Klaar: beelden staan in", BEELDEN)

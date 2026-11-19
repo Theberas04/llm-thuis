@@ -14,6 +14,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MASTERSLEUTEL = "sk-moeder-proef"
 ANTWOORD = "Hallo! Alles werkt."
+HASH = "682e999e7fc02509fcdf2bbf0c9f585265ee8943a91daa29dd9880b2afca9bce"
+VOL_SLEUTEL = {"token": HASH, "key_name": "sk-...vYkw", "key_alias": "thuisapp",
+               "spend": 0.12, "max_budget": 5.0, "created_at": "2026-11-19T10:00:00Z"}
 
 
 class StubHandler(BaseHTTPRequestHandler):
@@ -55,6 +58,7 @@ class StubHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         self._bewaar(b"")
         pad = self.path.split("?")[0]
+        query = self.path.split("?", 1)[1] if "?" in self.path else ""
         if pad == "/health/liveliness":
             return self._tekst('"I am alive!"')
         if pad == "/v1/models":
@@ -63,8 +67,15 @@ class StubHandler(BaseHTTPRequestHandler):
         if pad == "/key/list":
             if not self._auth_ok():
                 return self._json({"detail": "invalid key"}, 401)
-            return self._json({"keys": [{"key_name": "thuisapp", "max_budget": 5,
-                                         "spend": 0.12, "created_at": "2026-11-19"}]})
+            # De echte gateway geeft zonder return_full_object alleen hashes terug;
+            # die vorm bootsen we na met kaal=True.
+            if self.server.kaal or "return_full_object" not in query:
+                return self._json({"keys": [HASH], "total_count": 1})
+            return self._json({"keys": [VOL_SLEUTEL], "total_count": 1})
+        if pad == "/key/info":
+            if not self._auth_ok():
+                return self._json({"detail": "invalid key"}, 401)
+            return self._json({"key": HASH, "info": VOL_SLEUTEL})
         return self._json({"detail": "onbekende route"}, 404)
 
     def do_POST(self):  # noqa: N802
@@ -113,6 +124,7 @@ class StubGateway(ThreadingHTTPServer):
     def __init__(self, poort: int = 0):
         super().__init__(("127.0.0.1", poort), StubHandler)
         self.aanroepen: list[dict] = []
+        self.kaal = False  # True = /key/list geeft alleen hashes (zoals de echte gateway zonder vlag)
 
     @property
     def url(self) -> str:

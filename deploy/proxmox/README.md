@@ -43,6 +43,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Theberas04/llm-thuis/mai
 | `BEHEERDER_WACHTWOORD` | wordt gegenereerd | wachtwoord voor sleutelbeheer |
 | `ROOTFS_STORAGE` / `TEMPLATE_STORAGE` | automatisch | dwing een opslag af |
 | `THUIS_KIT_DIR` | `/opt/llm-thuis-kit` | waar de kit blijft staan |
+| `THUIS_BASIS_URL` | leeg | adres dat het bord toont, bijvoorbeeld achter een eigen naam |
 | `GH_TOKEN` | leeg | alleen nodig als de repo privé staat |
 
 De kit wordt ook opnieuw bruikbaar gehouden: `check-llm-thuis.sh`,

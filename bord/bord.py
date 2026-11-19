@@ -569,8 +569,9 @@ __HUISSTIJL__
         .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
         .then(function(u){
           if (u.ok) {
-            melding('#sleutel-uitslag', 'goed', 'Sleutel voor <b>' + escapeHtml(u.j.naam) + '</b> — bewaar hem nu,'
-              + ' je ziet hem hierna niet meer:<div class="sleutel">' + escapeHtml(u.j.sleutel) + '</div>');
+            melding('#sleutel-uitslag', 'goed', '<div>Nieuwe sleutel voor <b>' + escapeHtml(u.j.naam)
+              + '</b>. Bewaar hem nu, je ziet hem hierna niet meer:</div>'
+              + '<div class="sleutel">' + escapeHtml(u.j.sleutel) + '</div>');
             document.querySelector('#sleutel-naam').value = '';
             document.querySelector('#sleutel-budget').value = '';
             laadSleutels();
@@ -663,9 +664,42 @@ def _sleutels_aan() -> bool:
 
 
 def sleutels_json() -> dict:
-    uit = gateway_json("/key/list", "GET", timeout=20)
-    sleutels = uit.get("keys") or []
-    return {"sleutels": sleutels if isinstance(sleutels, list) else []}
+    """Lijst van sleutels met naam, budget en verbruik.
+
+    Let op: de gateway geeft op /key/list standaard alleen de *hashes* terug. Zonder
+    return_full_object krijg je een lijst strings en toont de pagina allemaal lege
+    rijen; met de vlag krijg je de objecten. Valt die route weg, dan halen we de
+    gegevens per sleutel op via /key/info.
+    """
+    uit = gateway_json("/key/list?return_full_object=true", "GET", timeout=30)
+    ruw = uit.get("keys") or []
+    if not isinstance(ruw, list):
+        return {"sleutels": []}
+    uitgesplitst: list[dict] = []
+    for item in ruw[:50]:
+        if isinstance(item, dict):
+            uitgesplitst.append(_sleutel_uit_item(item))
+        elif isinstance(item, str):
+            try:
+                info = (gateway_json(f"/key/info?key={item}", "GET", timeout=20).get("info") or {})
+            except GatewayFout:
+                info = {}
+            uitgesplitst.append(_sleutel_uit_item(info, terugval=item))
+    return {"sleutels": uitgesplitst}
+
+
+def _sleutel_uit_item(item: dict, terugval: str = "") -> dict:
+    naam = str(item.get("key_alias") or item.get("key_name") or terugval or "zonder naam")
+    budget = item.get("max_budget")
+    verbruik = item.get("spend", item.get("total_spend"))
+    aangemaakt = str(item.get("created_at") or item.get("updated_at") or "")[:10]
+    return {
+        "naam": naam,
+        "budget": budget,
+        "verbruik": verbruik,
+        "aangemaakt": aangemaakt,
+        "verlopen": item.get("expires"),
+    }
 
 
 def maak_sleutel(lichaam: dict) -> dict:

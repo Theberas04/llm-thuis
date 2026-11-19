@@ -224,7 +224,12 @@ class TestSleutelbeheer(Proef):
         code, body, _ = self.verzoek("/api/sleutels", koek=koek)
         self.assertEqual(code, 200)
         sleutels = json.loads(body)["sleutels"]
-        self.assertEqual(sleutels[0]["key_name"], "thuisapp")
+        # Het bord vertaalt de sleutelobjecten naar naam/budget/verbruik, zodat de
+        # pagina geen lege rijen toont als de gateway een andere vorm teruggeeft.
+        self.assertEqual(sleutels[0]["naam"], "thuisapp")
+        self.assertEqual(sleutels[0]["budget"], 5.0)
+        self.assertEqual(sleutels[0]["verbruik"], 0.12)
+        self.assertEqual(sleutels[0]["aangemaakt"], "2026-11-19")
 
         voor = len(self.stub.aanroepen)
         code, body, _ = self.verzoek("/api/sleutels", "POST",
@@ -238,6 +243,24 @@ class TestSleutelbeheer(Proef):
         self.assertEqual(verstuurd["key_alias"], "thuisapp-nieuw")
         self.assertEqual(verstuurd["max_budget"], 5.0)
         self.assertEqual(oproep["auth"], f"Bearer {stub_gateway.MASTERSLEUTEL}")
+
+    def test_sleutels_zonder_volledige_objecten_vallen_terug_op_key_info(self):
+        """De echte gateway geeft op /key/list alleen hashes; dan moet het bord
+        /key/info gebruiken in plaats van lege rijen te tonen."""
+        self.stub.kaal = True
+        try:
+            voor = len(self.stub.aanroepen)
+            koek = self.log_in()
+            code, body, _ = self.verzoek("/api/sleutels", koek=koek)
+            self.assertEqual(code, 200)
+            sleutels = json.loads(body)["sleutels"]
+            self.assertEqual(sleutels[0]["naam"], "thuisapp")
+            self.assertEqual(sleutels[0]["budget"], 5.0)
+            paden = [a["pad"] for a in self.stub.aanroepen[voor:]]
+            self.assertTrue(any(p.startswith("/key/info") for p in paden), paden)
+        finally:
+            self.stub.kaal = False
+            self.verzoek("/api/uitloggen", "POST", koek=koek)
 
     def test_budget_moet_een_getal_zijn(self):
         koek = self.log_in()
