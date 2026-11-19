@@ -23,6 +23,10 @@ REPO="${THUIS_REPO:-Theberas04/llm-thuis}"
 TAK="${THUIS_TAK:-main}"
 KIT="${THUIS_KIT_DIR:-/opt/llm-thuis-kit}"
 DROOG="${DROOG:-0}"
+# Alleen de kit ophalen en de compleetheid controleren, en dan stoppen. Zo kan dit
+# script ook op een gewone machine (zonder root en zonder Proxmox) worden getoetst,
+# en blijft "de kit is compleet" een proef in plaats van een bewering.
+FETCH_ONLY="${FETCH_ONLY:-0}"
 
 log(){ printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn(){ printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
@@ -31,9 +35,11 @@ die(){ printf '\033[1;31m[fout]\033[0m %s\n' "$*" >&2; exit 1; }
 # Versiestempel: het meegeplakte uitschrift zegt zelf welke versie er liep.
 log "LLM-thuis installer (kit uit $REPO/$TAK)"
 
-[ "$(id -u)" -eq 0 ] || die "Draai dit als root op de Proxmox-host."
-command -v pct >/dev/null || die "pct niet gevonden: dit is geen Proxmox VE-host."
-command -v pveam >/dev/null || die "pveam niet gevonden: dit is geen Proxmox VE-host."
+if [ "$FETCH_ONLY" != "1" ]; then
+  [ "$(id -u)" -eq 0 ] || die "Draai dit als root op de Proxmox-host."
+  command -v pct >/dev/null || die "pct niet gevonden: dit is geen Proxmox VE-host."
+  command -v pveam >/dev/null || die "pveam niet gevonden: dit is geen Proxmox VE-host."
+fi
 command -v curl >/dev/null || die "curl ontbreekt. Installeer het met: apt-get install -y curl"
 command -v tar >/dev/null || die "tar ontbreekt."
 
@@ -76,6 +82,11 @@ for f in deploy/proxmox/create-llm-thuis-lxc.sh \
   [ -f "$KIT/$f" ] || die "De kit is onvolledig: $f ontbreekt in de tarball van $REPO/$TAK."
 done
 log "Kit compleet in $KIT"
+
+if [ "$FETCH_ONLY" = "1" ]; then
+  log "FETCH_ONLY=1: de kit is opgehaald en compleet; ik maak niets aan en stop hier."
+  exit 0
+fi
 
 if [ "$DROOG" = "1" ]; then
   log "DROOG=1: ik maak niets aan. Dit zou er gebeuren:"
