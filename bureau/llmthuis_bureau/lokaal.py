@@ -13,6 +13,7 @@ dit programma.
 from __future__ import annotations
 
 import http.client
+import contextlib
 import importlib.util
 import json
 import os
@@ -133,17 +134,28 @@ class Sleutelboek:
         self.pad.parent.mkdir(parents=True, exist_ok=True)
         self._maak_tabel()
 
-    def _verbind(self) -> sqlite3.Connection:
-        """Verbinding met de tabel gegarandeerd: een weggegooid of nieuw bestand mag
-        het sleutelbeheer niet stil laten stuklopen."""
+    @contextlib.contextmanager
+    def _verbind(self):
+        """Verbinding die altijd weer sluit.
+
+        'with sqlite3.connect(...)' legt alleen vast of terugdraait, het sluit de
+        verbinding niet: die blijft dan het bestand vasthouden. Op Windows kan het
+        bestand daardoor niet meer worden weggegooid of vervangen, dus sluiten we hem
+        hier met de hand. Meteen ook de tabel aanmaken, zodat een weggegooid of nieuw
+        bestand het sleutelbeheer niet stil laat stuklopen.
+        """
         verbinding = sqlite3.connect(self.pad, timeout=10)
         verbinding.row_factory = sqlite3.Row
-        verbinding.execute(
-            "CREATE TABLE IF NOT EXISTS sleutels ("
-            " sleutel TEXT PRIMARY KEY, naam TEXT NOT NULL, budget REAL,"
-            " verbruik REAL NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0,"
-            " aangemaakt TEXT NOT NULL)")
-        return verbinding
+        try:
+            verbinding.execute(
+                "CREATE TABLE IF NOT EXISTS sleutels ("
+                " sleutel TEXT PRIMARY KEY, naam TEXT NOT NULL, budget REAL,"
+                " verbruik REAL NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0,"
+                " aangemaakt TEXT NOT NULL)")
+            with verbinding:
+                yield verbinding
+        finally:
+            verbinding.close()
 
     def _maak_tabel(self) -> None:
         with self._verbind() as verbinding:
