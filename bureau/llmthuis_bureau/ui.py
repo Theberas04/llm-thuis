@@ -102,8 +102,12 @@ class Venster:
         k = KLEUREN
         self.hoofd.configure(bg=k["bg"])
         self.hoofd.title("LLM-thuis")
-        self.hoofd.geometry("1060x740")
-        self.hoofd.minsize(900, 620)
+        # Niet groter dan het scherm: op een klein beeldscherm verdween de onderkant
+        # (het sleutelvak) anders achter de taakbalk.
+        breedte = min(1020, max(880, self.hoofd.winfo_screenwidth() - 60))
+        hoogte = min(720, max(560, self.hoofd.winfo_screenheight() - 110))
+        self.hoofd.geometry(f"{breedte}x{hoogte}")
+        self.hoofd.minsize(880, 560)
         self._stijl()
 
         kop = tk.Frame(self.hoofd, bg=k["pane"], highlightbackground=k["line"], highlightthickness=1)
@@ -198,7 +202,13 @@ class Venster:
                                     ("test", "Laatste test", 560)):
             self.modelboom.heading(kolom, text=kop)
             self.modelboom.column(kolom, width=breedte, anchor="w")
-        self.modelboom.pack(fill="both", expand=True, pady=(8, 8))
+        modelvak = tk.Frame(binnen, bg=KLEUREN["pane"])
+        modelvak.pack(fill="both", expand=True, pady=(8, 8))
+        modelbalk = ttk.Scrollbar(modelvak, orient="vertical",
+                                  command=self.modelboom.yview)
+        self.modelboom.configure(yscrollcommand=modelbalk.set)
+        modelbalk.pack(side="right", fill="y")
+        self.modelboom.pack(side="left", fill="both", expand=True)
         self.modelboom.bind("<Double-1>", lambda _e: self.test_gekozen())
 
         rij = tk.Frame(binnen, bg=KLEUREN["pane"])
