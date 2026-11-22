@@ -152,19 +152,39 @@ class Venster:
         self._kleurstreep = streep
         self.hoofd.after(60, self._teken_streep)
 
-        romp = tk.Frame(self.hoofd, bg=k["bg"])
-        romp.pack(fill="both", expand=True, padx=16, pady=14)
+        # Alles in een schuifbaar vlak: op een klein scherm blijft de onderste kaart
+        # anders onbereikbaar achter de onderrand.
+        buitenvlak = tk.Frame(self.hoofd, bg=k["bg"])
+        buitenvlak.pack(fill="both", expand=True)
+        doek = tk.Canvas(buitenvlak, bg=k["bg"], highlightthickness=0)
+        balk = ttk.Scrollbar(buitenvlak, orient="vertical", command=doek.yview)
+        doek.configure(yscrollcommand=balk.set)
+        balk.pack(side="right", fill="y")
+        doek.pack(side="left", fill="both", expand=True)
+
+        romp = tk.Frame(doek, bg=k["bg"])
+        venster_id = doek.create_window((0, 0), window=romp, anchor="nw")
         romp.columnconfigure(0, weight=1)
+
+        def herteken(_gebeurtenis=None) -> None:
+            doek.configure(scrollregion=doek.bbox("all"))
+            doek.itemconfigure(venster_id, width=doek.winfo_width())
+
+        romp.bind("<Configure>", herteken)
+        doek.bind("<Configure>", herteken)
+
+        def rol(_gebeurtenis) -> None:
+            doek.yview_scroll(-1 if _gebeurtenis.delta > 0 else 1, "units")
+
+        self.hoofd.bind("<MouseWheel>", rol)      # Windows
+        self.hoofd.bind("<Button-4>", lambda _e: doek.yview_scroll(-1, "units"))
+        self.hoofd.bind("<Button-5>", lambda _e: doek.yview_scroll(1, "units"))
         # De vakken delen de hoogte: zo blijft het sleutelvak zichtbaar op een klein
         # scherm in plaats van onder de onderrand te verdwijnen.
-        romp.rowconfigure(1, weight=0)
-        romp.rowconfigure(2, weight=3)
-        romp.rowconfigure(3, weight=2)
-
-        self._adresblok(romp).grid(row=0, column=0, sticky="ew")
-        self._lokaalblok(romp).grid(row=1, column=0, sticky="ew", pady=(12, 0))
-        self._modellenblok(romp).grid(row=2, column=0, sticky="nsew", pady=(12, 0))
-        self._sleutelblok(romp).grid(row=3, column=0, sticky="nsew", pady=(12, 0))
+        self._adresblok(romp).grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 0))
+        self._lokaalblok(romp).grid(row=1, column=0, sticky="ew", padx=16, pady=(12, 0))
+        self._modellenblok(romp).grid(row=2, column=0, sticky="ew", padx=16, pady=(12, 0))
+        self._sleutelblok(romp).grid(row=3, column=0, sticky="ew", padx=16, pady=(12, 14))
 
         self.log = tk.Text(self.hoofd, height=5, bg="#0f172a", fg="#dbe7f5", wrap="word",
                            font=("Consolas", 9), relief="flat", padx=10, pady=8)

@@ -260,7 +260,18 @@ def main() -> int:
             plek = argumenten.index("--model")
             if plek + 1 < len(argumenten):
                 upstream = argumenten[plek + 1]
-        bord = lokaal.LokaalBord(poort=poort, upstream=upstream)
+        # Het beheerderswachtwoord mag uit de omgeving komen (THUIS_BEHEER_HASH) of uit
+        # een beheer.env naast de app; zonder dat is alleen het beheer dicht.
+        afdruk = os.environ.get("THUIS_BEHEER_HASH", "")
+        if not afdruk:
+            bestand = Path.cwd() / "beheer.env"
+            try:
+                for regel in bestand.read_text(encoding="utf-8").splitlines():
+                    if regel.strip().startswith("THUIS_BEHEER_HASH="):
+                        afdruk = regel.split("=", 1)[1].strip()
+            except OSError:
+                afdruk = ""
+        bord = lokaal.LokaalBord(poort=poort, upstream=upstream, beheer_afdruk=afdruk)
         log(f"Lokaal bord op {bord.start()} — model op {bord.upstream} (stop met Ctrl+C)")
         try:
             while True:
