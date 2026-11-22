@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import queue
+import secrets
 import sys
 import threading
 import webbrowser
@@ -18,6 +19,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from . import core
+from . import lokaal
 from .version import VERSIE
 
 # Huisstijl: dezelfde kleuren als het bord en Werdens Monitor.
@@ -84,6 +86,12 @@ class Venster:
         self.sleutel_naam_var = tk.StringVar()
         self.sleutel_budget_var = tk.StringVar(value="5")
         self.status_var = tk.StringVar(value="Klaar om te verbinden.")
+        self.upstream_var = tk.StringVar(
+            value=gegevens.get("upstream") or lokaal.STANDAARD_UPSTREAM)
+        self.lokaal_var = tk.StringVar(
+            value="Nog niets lokaal gestart. Zet je bord op deze pc en je model erbij — "
+                  "dan is er geen Proxmox, geen Docker en geen database-dienst nodig.")
+        self.lokaal_bord: lokaal.LokaalBord | None = None
         self.doorgeef_var = tk.StringVar(value="")
         self.versie_var = tk.StringVar(value=f"versie {VERSIE}")
 
@@ -93,6 +101,11 @@ class Venster:
         self.hoofd.after(150, self._pomp)
         if self.basis_var.get().strip():
             self.hoofd.after(250, self.ververs)
+        elif not self.headless:
+            # Geen adres bekend? Dan is dit de eerste keer op een pc waar nog niets
+            # staat: zet bord en model meteen lokaal aan.
+            self.zet_status("Eerste keer: het lokale bord wordt gestart…")
+            self.hoofd.after(300, self.start_lokaal)
         else:
             self.zet_status("Vul het adres van je bord in en druk op Verversen.")
         self.hoofd.after(700, lambda: self.controleer_bijwerking(bij_start=True))
@@ -133,22 +146,52 @@ class Venster:
 
         self.knop_status.pack(anchor="e", pady=(4, 0))
 
+        # Kleurstreep onder de kop: dezelfde overgang als het merk op de pagina.
+        streep = tk.Canvas(self.hoofd, height=4, highlightthickness=0, bg=KLEUREN["pane"])
+        streep.pack(fill="x")
+        self._kleurstreep = streep
+        self.hoofd.after(60, self._teken_streep)
+
         romp = tk.Frame(self.hoofd, bg=k["bg"])
         romp.pack(fill="both", expand=True, padx=16, pady=14)
         romp.columnconfigure(0, weight=1)
         # De vakken delen de hoogte: zo blijft het sleutelvak zichtbaar op een klein
         # scherm in plaats van onder de onderrand te verdwijnen.
-        romp.rowconfigure(1, weight=3)
-        romp.rowconfigure(2, weight=2)
+        romp.rowconfigure(1, weight=0)
+        romp.rowconfigure(2, weight=3)
+        romp.rowconfigure(3, weight=2)
 
         self._adresblok(romp).grid(row=0, column=0, sticky="ew")
-        self._modellenblok(romp).grid(row=1, column=0, sticky="nsew", pady=(12, 0))
-        self._sleutelblok(romp).grid(row=2, column=0, sticky="nsew", pady=(12, 0))
+        self._lokaalblok(romp).grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        self._modellenblok(romp).grid(row=2, column=0, sticky="nsew", pady=(12, 0))
+        self._sleutelblok(romp).grid(row=3, column=0, sticky="nsew", pady=(12, 0))
 
         self.log = tk.Text(self.hoofd, height=5, bg="#0f172a", fg="#dbe7f5", wrap="word",
                            font=("Consolas", 9), relief="flat", padx=10, pady=8)
         self.log.configure(state="disabled")
         self.log.pack(fill="x")
+
+    def _teken_streep(self) -> None:
+        """Tekent de merkovergang (turquoise naar blauw) over de volle breedte."""
+        doek = self._kleurstreep
+        doek.delete("alles")
+        breedte = max(doek.winfo_width(), 2)
+        stappen = 96
+        for i in range(stappen):
+            deel = i / (stappen - 1)
+            kleur = self._meng(MERK[0], MERK[1], deel * 2) if deel < 0.5 \
+                else self._meng(MERK[1], MERK[2], (deel - 0.5) * 2)
+            x0 = int(breedte * i / stappen)
+            x1 = int(breedte * (i + 1) / stappen) + 1
+            doek.create_rectangle(x0, 0, x1, 4, fill=kleur, outline=kleur)
+
+    @staticmethod
+    def _meng(van: str, naar: str, deel: float) -> str:
+        deel = min(max(deel, 0.0), 1.0)
+        uit = "#" + "".join(
+            f"{round(int(van[1 + i * 2:3 + i * 2], 16) * (1 - deel) + int(naar[1 + i * 2:3 + i * 2], 16) * deel):02x}"
+            for i in range(3))
+        return uit
 
     def _stijl(self) -> None:
         stijl = ttk.Style()
@@ -158,7 +201,13 @@ class Venster:
             pass
         k = KLEUREN
         stijl.configure("TButton", font=(self.font, 10), padding=(12, 6))
-        stijl.configure("Hoofd.TButton", font=(self.font, 10, "bold"))
+        # De hoofdknoppen zien er net zo uit als op de pagina: accentkleur, witte letters.
+        stijl.configure("Hoofd.TButton", font=(self.font, 10, "bold"),
+                        background=KLEUREN["accent"], foreground="#ffffff", borderwidth=0)
+        stijl.map("Hoofd.TButton",
+                  background=[("active", KLEUREN["accent_d"]), ("pressed", KLEUREN["accent_d"]),
+                              ("disabled", KLEUREN["line2"])],
+                  foreground=[("disabled", KLEUREN["muted2"])])
         stijl.configure("TEntry", padding=6)
         stijl.configure("Treeview", font=(self.font, 10), rowheight=26,
                         background=k["pane"], fieldbackground=k["pane"], foreground=k["txt"],
@@ -168,7 +217,7 @@ class Venster:
         stijl.map("Treeview", background=[("selected", k["accent"])],
                   foreground=[("selected", "#ffffff")])
 
-    def _kaart(self, ouder: tk.Widget, titel: str) -> tk.Frame:
+    def _kaart(self, ouder: tk.Widget, titel: str) -> tuple[tk.Frame, tk.Frame]:
         buiten = tk.Frame(ouder, bg=KLEUREN["pane"], highlightbackground=KLEUREN["line"],
                           highlightthickness=1)
         binnen = tk.Frame(buiten, bg=KLEUREN["pane"])
@@ -192,6 +241,25 @@ class Venster:
         self.knop_open.pack(side="left", padx=8)
         tk.Label(binnen, textvariable=self.doorgeef_var, bg=KLEUREN["pane"], fg=KLEUREN["muted"],
                  font=("Consolas", 9), anchor="w", justify="left").pack(fill="x", pady=(8, 0))
+        return buiten
+
+    def _lokaalblok(self, ouder: tk.Widget) -> tk.Frame:
+        """Alles op deze pc: bord én model, zonder Proxmox of database-dienst."""
+        buiten, binnen = self._kaart(ouder, "Lokaal op deze pc")
+        rij = tk.Frame(binnen, bg=KLEUREN["pane"])
+        rij.pack(fill="x", pady=(8, 0))
+        tk.Label(rij, text="Je model", bg=KLEUREN["pane"], fg=KLEUREN["muted"],
+                 font=(self.font, 10)).pack(side="left")
+        self.lokaal_upstream = ttk.Entry(rij, textvariable=self.upstream_var, width=30)
+        self.lokaal_upstream.pack(side="left", padx=8)
+        self.knop_lokaal = ttk.Button(rij, text="Start lokaal", style="Hoofd.TButton",
+                                       command=self.start_lokaal)
+        self.knop_lokaal.pack(side="left")
+        self.knop_lokaal_stop = ttk.Button(rij, text="Stop lokaal", command=self.stop_lokaal)
+        self.lokaal_status = tk.Label(binnen, textvariable=self.lokaal_var, bg=KLEUREN["pane"],
+                                      fg=KLEUREN["muted"], font=(self.font, 10),
+                                      justify="left", anchor="w")
+        self.lokaal_status.pack(fill="x", pady=(8, 0))
         return buiten
 
     def _modellenblok(self, ouder: tk.Widget) -> tk.Frame:
@@ -453,6 +521,78 @@ class Venster:
             self.zet_status(str(fout), "let")
             return
         webbrowser.open(adres)
+
+    # -- lokaal op deze pc --------------------------------------------------- #
+    def start_lokaal(self) -> None:
+        """Zet bord én doorgeefluik naar je model op deze pc aan."""
+        if self.lokaal_bord is not None:
+            self.zet_status(f"Het lokale bord draait al op {self.lokaal_bord.basis_url}.", "let")
+            return
+        upstream = self.upstream_var.get().strip() or lokaal.STANDAARD_UPSTREAM
+        self.zet_status("Het lokale bord wordt gestart…")
+        self.stap("lokaal-starten")
+
+        def werk():
+            gegevens = core.lees_instellingen()
+            map_ = core.gegevensmap()
+            afdruk, wachtwoord = self._beheergegevens(map_)
+            bord = lokaal.LokaalBord(
+                poort=int(gegevens.get("lokaal_poort") or lokaal.STANDAARD_POORT),
+                upstream=upstream, gegevensmap=map_, beheer_afdruk=afdruk, wachtwoord=wachtwoord)
+            return bord, bord.start(), wachtwoord
+
+        self._start("lokaal", werk, self._na_start_lokaal)
+
+    def _na_start_lokaal(self, uitkomst) -> None:
+        bord, adres, wachtwoord = uitkomst
+        self.lokaal_bord = bord
+        self.basis_var.set(adres)
+        gegevens = core.lees_instellingen()
+        gegevens.update({"basis": adres, "upstream": self.upstream_var.get().strip(),
+                         "lokaal_poort": bord.poort})
+        core.bewaar_instellingen(gegevens)
+        self.knop_lokaal.pack_forget()
+        self.knop_lokaal_stop.pack(side="left", padx=8)
+        regel = (f"Lokaal bord draait op {adres} — je model op {self.upstream_var.get().strip()}. "
+                 f"Open het bord voor dezelfde pagina als de website.")
+        if wachtwoord:
+            regel += (f"\nBeheerderswachtwoord voor dit bord: {wachtwoord} — bewaar het, "
+                      f"je ziet het hierna niet meer.")
+        self.lokaal_var.set(regel)
+        self.zet_status(f"Lokaal bord actief op {adres}.", "goed")
+        self.stap("lokaal-actief")
+        self.ververs()
+
+    def stop_lokaal(self) -> None:
+        if self.lokaal_bord is None:
+            return
+        self.lokaal_bord.stop()
+        self.lokaal_bord = None
+        self.knop_lokaal_stop.pack_forget()
+        self.knop_lokaal.pack(side="left")
+        self.lokaal_var.set("Het lokale bord is gestopt.")
+        self.zet_status("Lokaal bord gestopt.")
+
+    def _beheergegevens(self, map_) -> tuple[str, str]:
+        """Leest de wachtwoordafdruk, of maakt er één met een nieuw wachtwoord."""
+        bestand = map_ / "beheer.env"
+        afdruk = ""
+        try:
+            for regel in bestand.read_text(encoding="utf-8").splitlines():
+                if regel.strip().startswith("THUIS_BEHEER_HASH="):
+                    afdruk = regel.split("=", 1)[1].strip()
+        except OSError:
+            afdruk = ""
+        if afdruk:
+            return afdruk, ""
+        wachtwoord = secrets.token_urlsafe(9)
+        try:
+            afdruk = str(lokaal.bord_module().maak_afdruk(wachtwoord))
+            bestand.write_text(f"THUIS_BEHEER_HASH={afdruk}\n", encoding="utf-8")
+        except Exception as fout:  # noqa: BLE001 - zonder afdruk is alleen beheer dicht
+            self.schrijf(f"geen wachtwoordafdruk kunnen maken ({fout})")
+            return "", ""
+        return afdruk, wachtwoord
 
     # -- sleutels ----------------------------------------------------------- #
     def inloggen(self) -> None:

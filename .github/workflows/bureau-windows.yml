@@ -45,6 +45,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           python bureau\tests\test_core.py
+          python bureau\tests\test_lokaal.py
           python -m compileall -q bureau
 
       - name: Bouwen (ZIP-versie en los .exe-bestand)
@@ -94,7 +95,7 @@ jobs:
           Write-Host "Stappen: $($verslag.stappen -join ' -> ')"
           Write-Host "Fouten: $($verslag.fouten -join ' | ')"
           if (-not $verslag.ok) { throw "de zelftest meldt een fout: $($verslag.fouten -join ' | ')" }
-          foreach ($stap in @("start", "kern", "bijwerkscript", "pakketcontrole", "instellingen", "venster")) {
+          foreach ($stap in @("start", "kern", "bijwerkscript", "pakketcontrole", "instellingen", "venster", "lokaal")) {
             if ($verslag.stappen -notcontains $stap) { throw "de zelftest kwam niet langs '$stap'" }
           }
           if ($proc.ExitCode -ne 0) { throw "de zelftest gaf afsluitcode $($proc.ExitCode)" }

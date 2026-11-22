@@ -16,6 +16,8 @@ rem naast zich kunnen vervangen, en dat kan niet met één opgevouwen bestand.
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name "LLM-thuis" ^
   --icon "packaging\merk.ico" ^
   --add-data "version.txt;." ^
+  --add-data "..\bord\bord.py;bord" ^
+  --add-data "..\assets\merk.png;assets" ^
   main.py
 if errorlevel 1 goto :fout
 
@@ -28,6 +30,8 @@ rem voor wie alleen even wil kijken.
 python -m PyInstaller --noconfirm --clean --onefile --windowed --name "LLM-thuis-alleen" ^
   --icon "packaging\merk.ico" ^
   --add-data "version.txt;." ^
+  --add-data "..\bord\bord.py;bord" ^
+  --add-data "..\assets\merk.png;assets" ^
   main.py
 if errorlevel 1 goto :fout
 echo Klaar: dist\LLM-thuis-alleen.exe

@@ -112,6 +112,31 @@ vervangen en blijft de oude versie gewoon werken.
 Instellingen staan in `%APPDATA%\LLM-thuis`; het beheerderswachtwoord wordt nooit
 bewaard.
 
+### Alles op één pc: ook het bord en het model
+
+Je hebt geen Proxmox, geen Docker en geen database-dienst nodig om dit te draaien:
+de app zet desgewenst **bord én gateway op dezelfde pc** als waar je model staat.
+Start je de app voor het eerst zonder adres, dan doet hij dat meteen zelf.
+
+1. Zet een model op je pc — met [Ollama](https://ollama.com) is dat één commando,
+   bijvoorbeeld `ollama pull llama3.2`. Ollama luistert daarna op
+   `http://127.0.0.1:11434`.
+2. Start `LLM-thuis.exe`. Het vak **Lokaal op deze pc** vult dat adres alvast in;
+   druk op **Start lokaal**.
+3. De app opent zijn eigen bord op `http://127.0.0.1:8100` — dezelfde pagina, in
+   dezelfde huisstijl als het bord in je netwerk, dus ook op je telefoon te bekijken
+   zolang je op dat netwerk zit. Je apps zetten `http://127.0.0.1:8100/v1` als adres.
+
+Ook zonder venster, bijvoorbeeld in een opstartbestand:
+
+```bat
+LLM-thuis.exe --lokaal --poort 8100 --model http://127.0.0.1:11434/v1
+```
+
+Sleutels, budget en verbruik staan dan in `%APPDATA%\LLM-thuis\sleutels.sqlite3`.
+Voor een model op je eigen machine verandert er niets aan je budget — rekenen kost
+daar niets; zet je er een betaalde dienst achter, dan telt het verbruik daarvan wél.
+
 ## Zo gebruik je het
 
 ```bash

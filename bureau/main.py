@@ -158,6 +158,38 @@ def proef_venster(verslag: Verslag) -> None:
     verslag.stap("venster")
 
 
+def proef_lokaal(verslag: Verslag) -> None:
+    """Toetst dat het ingepakte programma het bord op deze pc kan neerzetten.
+
+    Dit is de kern van "alles op één pc": dezelfde pagina als de website, geserveerd
+    door het programma zelf, met de sleutels in een bestand naast de app.
+    """
+    import urllib.request
+    from llmthuis_bureau import lokaal
+
+    bord = lokaal.LokaalBord(poort=0, upstream="http://127.0.0.1:1/v1",
+                            gegevensmap=Path(tempfile.mkdtemp(prefix="llm-thuis-proef-lokaal-")),
+                            wachtwoord="proef-wachtwoord")
+    adres = bord.start()
+    try:
+        with urllib.request.urlopen(adres + "/api/status", timeout=20) as antwoord:
+            gegevens = json.loads(antwoord.read().decode("utf-8"))
+        if not gegevens.get("lokaal"):
+            raise AssertionError("het lokale bord meldt zich niet als lokaal")
+        with urllib.request.urlopen(adres + "/", timeout=20) as antwoord:
+            html = antwoord.read().decode("utf-8", "replace")
+        if "LLM-thuis" not in html:
+            raise AssertionError("de pagina van het lokale bord is niet de bordpagina")
+        if "LiteLLM" in html:
+            raise AssertionError("de lokale pagina verwijst nog naar LiteLLM")
+        if bord.sleutels.aantal() != 0:
+            raise AssertionError("een vers bord hoort nog geen sleutels te hebben")
+        verslag.gegevens.setdefault("bijzonderheden", {})["lokaal_adres"] = adres
+    finally:
+        bord.stop()
+    verslag.stap("lokaal")
+
+
 def doe_selftest(pad: Path | None) -> int:
     verslag = Verslag(pad)
     try:
@@ -166,6 +198,7 @@ def doe_selftest(pad: Path | None) -> int:
         proef_kern(verslag)
         proef_instellingen(verslag)
         proef_venster(verslag)
+        proef_lokaal(verslag)
         proef_openbaar(verslag)
     except Exception as fout:  # noqa: BLE001 - een venster-app zonder console moet
         # zijn eigen fout opschrijven, anders leest een crash als "de bouw hangt".
@@ -211,6 +244,30 @@ def main() -> int:
             pad = Path(argumenten[plek + 1])
         os.environ["LLM_THUIS_HEADLESS"] = "1"
         return doe_selftest(pad)
+
+    if "--lokaal" in argumenten:
+        # Alleen het bord en het doorgeefluik, zonder venster. Handig op een pc of
+        # server waar je het bord wilt laten lopen zonder programma op het scherm.
+        from llmthuis_bureau import lokaal
+
+        poort = lokaal.STANDAARD_POORT
+        if "--poort" in argumenten:
+            plek = argumenten.index("--poort")
+            if plek + 1 < len(argumenten):
+                poort = int(argumenten[plek + 1])
+        upstream = lokaal.STANDAARD_UPSTREAM
+        if "--model" in argumenten:
+            plek = argumenten.index("--model")
+            if plek + 1 < len(argumenten):
+                upstream = argumenten[plek + 1]
+        bord = lokaal.LokaalBord(poort=poort, upstream=upstream)
+        log(f"Lokaal bord op {bord.start()} — model op {bord.upstream} (stop met Ctrl+C)")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            bord.stop()
+        return 0
 
     if "--controleer-bijwerking" in argumenten:
         try:
