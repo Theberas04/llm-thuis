@@ -102,8 +102,8 @@ class Venster:
         k = KLEUREN
         self.hoofd.configure(bg=k["bg"])
         self.hoofd.title("LLM-thuis")
-        self.hoofd.geometry("1080x760")
-        self.hoofd.minsize(900, 640)
+        self.hoofd.geometry("1060x740")
+        self.hoofd.minsize(900, 620)
         self._stijl()
 
         kop = tk.Frame(self.hoofd, bg=k["pane"], highlightbackground=k["line"], highlightthickness=1)
@@ -124,16 +124,22 @@ class Venster:
                  font=(self.font, 10)).pack(anchor="e")
         self.knop_bijwerken = ttk.Button(rechts, text="Bijwerken", command=self.bijwerken)
         self.knop_status = tk.Label(rechts, textvariable=self.status_var, bg=k["pane"],
-                                    fg=k["muted"], font=(self.font, 10))
+                                    fg=k["muted"], font=(self.font, 10), justify="right",
+                                    wraplength=460)
 
         self.knop_status.pack(anchor="e", pady=(4, 0))
 
         romp = tk.Frame(self.hoofd, bg=k["bg"])
         romp.pack(fill="both", expand=True, padx=16, pady=14)
+        romp.columnconfigure(0, weight=1)
+        # De vakken delen de hoogte: zo blijft het sleutelvak zichtbaar op een klein
+        # scherm in plaats van onder de onderrand te verdwijnen.
+        romp.rowconfigure(1, weight=3)
+        romp.rowconfigure(2, weight=2)
 
-        self._adresblok(romp)
-        self._modellenblok(romp)
-        self._sleutelblok(romp)
+        self._adresblok(romp).grid(row=0, column=0, sticky="ew")
+        self._modellenblok(romp).grid(row=1, column=0, sticky="nsew", pady=(12, 0))
+        self._sleutelblok(romp).grid(row=2, column=0, sticky="nsew", pady=(12, 0))
 
         self.log = tk.Text(self.hoofd, height=5, bg="#0f172a", fg="#dbe7f5", wrap="word",
                            font=("Consolas", 9), relief="flat", padx=10, pady=8)
@@ -167,9 +173,8 @@ class Venster:
                  font=(self.font, 9, "bold")).pack(anchor="w")
         return buiten, binnen
 
-    def _adresblok(self, ouder: tk.Widget) -> None:
+    def _adresblok(self, ouder: tk.Widget) -> tk.Frame:
         buiten, binnen = self._kaart(ouder, "Je bord")
-        buiten.pack(fill="x")
         rij = tk.Frame(binnen, bg=KLEUREN["pane"])
         rij.pack(fill="x", pady=(8, 0))
         tk.Label(rij, text="Adres", bg=KLEUREN["pane"], fg=KLEUREN["muted"],
@@ -183,10 +188,10 @@ class Venster:
         self.knop_open.pack(side="left", padx=8)
         tk.Label(binnen, textvariable=self.doorgeef_var, bg=KLEUREN["pane"], fg=KLEUREN["muted"],
                  font=("Consolas", 9), anchor="w", justify="left").pack(fill="x", pady=(8, 0))
+        return buiten
 
-    def _modellenblok(self, ouder: tk.Widget) -> None:
+    def _modellenblok(self, ouder: tk.Widget) -> tk.Frame:
         buiten, binnen = self._kaart(ouder, "Modellen")
-        buiten.pack(fill="both", expand=True, pady=(12, 0))
         self.modelboom = ttk.Treeview(binnen, columns=("naam", "herkomst", "test"),
                                       show="headings", height=5)
         for kolom, kop, breedte in (("naam", "Model", 240), ("herkomst", "Herkomst", 110),
@@ -208,10 +213,10 @@ class Venster:
                                font=(self.font, 10))
         self.uitslag.configure(state="disabled")
         self.uitslag.pack(fill="x", pady=(10, 0))
+        return buiten
 
-    def _sleutelblok(self, ouder: tk.Widget) -> None:
+    def _sleutelblok(self, ouder: tk.Widget) -> tk.Frame:
         buiten, binnen = self._kaart(ouder, "Sleutels met een budget")
-        buiten.pack(fill="both", expand=True, pady=(12, 0))
 
         self.inlogrij = tk.Frame(binnen, bg=KLEUREN["pane"])
         self.inlogrij.pack(fill="x", pady=(8, 0))
@@ -250,6 +255,7 @@ class Venster:
         self.knop_kopieer = ttk.Button(binnen, text="Kopieer de sleutel", command=self.kopieer_sleutel)
 
         self._sleutels_tonen(False)
+        return buiten
 
     # -- klein grut --------------------------------------------------------- #
     def _sleutels_tonen(self, aan: bool) -> None:
@@ -530,7 +536,13 @@ class Venster:
         self.zet_status("De sleutel staat op het klembord.", "goed")
 
     # -- bijwerken ---------------------------------------------------------- #
-    def controleer_bijwerking(self, bij_start: bool = False) -> None:
+    def controleer_bijwerking(self, bij_start: bool = False, poging: int = 0) -> None:
+        # De bijwerkcontrole deelt de wachtrij met het bord, dus bij het starten kan
+        # het verversen nog lopen. Wachten en het opnieuw proberen is beter dan de
+        # gebruiker met "er loopt al een opdracht" op te zadelen.
+        if self.aan_het_werk and poging < 20:
+            self.hoofd.after(800, lambda: self.controleer_bijwerking(bij_start, poging + 1))
+            return
         self._bijwerking_gecontroleerd = True
         self.stap("bijwerking-controleren")
 
