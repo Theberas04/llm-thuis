@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis\LLM-thuis.exe"
+          $exe = Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis\LLM-thuis.exe"
           if (!(Test-Path $exe)) { throw "de bouw leverde geen LLM-thuis.exe op" }
           $report = Join-Path $env:GITHUB_WORKSPACE "zelftest-verslag.json"
           Remove-Item $report -ErrorAction SilentlyContinue
@@ -104,7 +104,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis-alleen.exe"
+          $exe = Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis-alleen.exe"
           if (!(Test-Path $exe)) { throw "de bouw leverde geen los .exe-bestand op" }
           $uit = & $exe --versie
           Write-Host "los bestand meldt versie: $uit"
@@ -119,7 +119,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis\LLM-thuis.exe"
+          $exe = Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis\LLM-thuis.exe"
           $info = New-Object System.Diagnostics.ProcessStartInfo
           $info.FileName = $exe
           $info.Arguments = "--basis http://192.168.1.100"
@@ -154,7 +154,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $versie = "${{ steps.versie.outputs.waarde }}"
-          $app = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis"
+          $app = Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis"
           $naam = "LLM-thuis-bureau-$versie-windows.zip"
           $zip = Join-Path $env:GITHUB_WORKSPACE $naam
           Compress-Archive -Path (Join-Path $app "*") -DestinationPath $zip -CompressionLevel Optimal -Force
@@ -162,7 +162,7 @@ jobs:
           # Het losse bestand krijgt ook de versie in de naam, zodat naast elkaar
           # gedownloade versies niet door elkaar te halen zijn.
           $los = Join-Path $env:GITHUB_WORKSPACE "LLM-thuis-$versie-exe.exe"
-          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis-alleen.exe") $los -Force
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis-alleen.exe") $los -Force
 
           python bureau\scripts\maak-manifest.py $zip $los
           if ($LASTEXITCODE -ne 0) { throw "het manifest kon niet worden gemaakt" }
