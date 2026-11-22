@@ -100,16 +100,35 @@ jobs:
           if ($proc.ExitCode -ne 0) { throw "de zelftest gaf afsluitcode $($proc.ExitCode)" }
           Write-Host "Zelftest geslaagd, versie $($verslag.versie), bijwerken mogelijk: $($verslag.bijwerken_mogelijk)"
 
-      - name: Los .exe-bestand kort toetsen
+      # Het losse bestand is een vensterprogramma zonder console, dus zijn uitvoer
+      # is niet op te vangen; daarom laat de zelftest ook hier een verslag schrijven.
+      - name: Los .exe-bestand toetsen
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = Join-Path $env:GITHUB_WORKSPACE "bureau\dist\LLM-thuis-alleen.exe"
           if (!(Test-Path $exe)) { throw "de bouw leverde geen los .exe-bestand op" }
-          $uit = & $exe --versie
-          Write-Host "los bestand meldt versie: $uit"
-          if ("$uit".Trim() -ne "${{ steps.versie.outputs.waarde }}") {
-            throw "het losse bestand meldt versie '$uit' in plaats van '${{ steps.versie.outputs.waarde }}'"
+          $report = Join-Path $env:GITHUB_WORKSPACE "zelftest-los.json"
+          Remove-Item $report -ErrorAction SilentlyContinue
+          $info = New-Object System.Diagnostics.ProcessStartInfo
+          $info.FileName = $exe
+          $info.Arguments = "--selftest `"$report`""
+          $info.WorkingDirectory = Split-Path $exe
+          $info.UseShellExecute = $false
+          $proc = [System.Diagnostics.Process]::Start($info)
+          Write-Host "$(Get-Date -Format o) los bestand gestart (pid $($proc.Id))"
+          $deadline = (Get-Date).AddSeconds(300)
+          while (-not $proc.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not $proc.HasExited) {
+            taskkill /PID $proc.Id /T /F | Out-Null
+            throw "de zelftest van het losse bestand liep vast"
+          }
+          if (!(Test-Path $report)) { throw "het losse bestand schreef geen verslag" }
+          $verslag = Get-Content $report -Raw | ConvertFrom-Json
+          Write-Host "los bestand: versie $($verslag.versie), stappen $($verslag.stappen -join ' -> ')"
+          if (-not $verslag.ok) { throw "het losse bestand meldt een fout: $($verslag.fouten -join ' | ')" }
+          if ("$($verslag.versie)".Trim() -ne "${{ steps.versie.outputs.waarde }}") {
+            throw "het losse bestand meldt versie '$($verslag.versie)' in plaats van '${{ steps.versie.outputs.waarde }}'"
           }
 
       # Beeld van het echte venster, op een echte Windows-machine. Lukt dit niet
