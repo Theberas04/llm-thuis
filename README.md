@@ -118,6 +118,8 @@ Je hebt geen Proxmox, geen Docker en geen database-dienst nodig om dit te draaie
 de app zet desgewenst **bord én gateway op dezelfde pc** als waar je model staat.
 Start je de app voor het eerst zonder adres, dan doet hij dat meteen zelf.
 
+![Lokaal op één pc](docs/img/lokaal-sleutels.png)
+
 1. Zet een model op je pc — met [Ollama](https://ollama.com) is dat één commando,
    bijvoorbeeld `ollama pull llama3.2`. Ollama luistert daarna op
    `http://127.0.0.1:11434`.
@@ -132,6 +134,12 @@ Ook zonder venster, bijvoorbeeld in een opstartbestand:
 ```bat
 LLM-thuis.exe --lokaal --poort 8100 --model http://127.0.0.1:11434/v1
 ```
+
+Zo ziet dat eruit: dezelfde pagina als het bord, maar met je eigen model erachter —
+hier de testuitslag van een model op het eigen netwerk (34 s voor een klein model op
+een CPU):
+
+![Test tegen je eigen model](docs/img/lokaal-test.png)
 
 Sleutels, budget en verbruik staan dan in `%APPDATA%\LLM-thuis\sleutels.sqlite3`.
 Voor een model op je eigen machine verandert er niets aan je budget — rekenen kost

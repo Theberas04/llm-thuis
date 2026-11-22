@@ -224,6 +224,32 @@ class ProefLokaal(unittest.TestCase):
         return rij
 
 
+class ProefWeggegooidBestand(unittest.TestCase):
+    """Een verdwenen sleutelbestand mag het beheer niet stil laten stuklopen."""
+
+    def test_bestand_weggooien_onder_een_draaiend_bord(self):
+        map_ = Path(tempfile.mkdtemp(prefix="llm-thuis-weg-"))
+        bord = lokaal.LokaalBord(poort=0, upstream="http://127.0.0.1:1/v1", gegevensmap=map_,
+                                 wachtwoord="proef")
+        adres = bord.start()
+        try:
+            (map_ / "sleutels.sqlite3").unlink()
+            bord.sleutels.maak("nieuw", 1.0)
+            self.assertEqual([r["naam"] for r in bord.sleutels.alles()], ["nieuw"])
+
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+            verzoek = urllib.request.Request(
+                adres + "/api/inloggen", data=json.dumps({"wachtwoord": "proef"}).encode(),
+                method="POST", headers={"Content-Type": "application/json"})
+            with opener.open(verzoek, timeout=20) as antwoord:
+                self.assertEqual(antwoord.status, 200)
+            with opener.open(adres + "/api/sleutels", timeout=20) as antwoord:
+                gegevens = json.loads(antwoord.read())
+            self.assertEqual([r["naam"] for r in gegevens["sleutels"]], ["nieuw"])
+        finally:
+            bord.stop()
+
+
 class ProefSleutelboek(unittest.TestCase):
     """Het sleutelbestand zelf, zonder server ertussen."""
 

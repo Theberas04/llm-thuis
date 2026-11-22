@@ -134,8 +134,15 @@ class Sleutelboek:
         self._maak_tabel()
 
     def _verbind(self) -> sqlite3.Connection:
+        """Verbinding met de tabel gegarandeerd: een weggegooid of nieuw bestand mag
+        het sleutelbeheer niet stil laten stuklopen."""
         verbinding = sqlite3.connect(self.pad, timeout=10)
         verbinding.row_factory = sqlite3.Row
+        verbinding.execute(
+            "CREATE TABLE IF NOT EXISTS sleutels ("
+            " sleutel TEXT PRIMARY KEY, naam TEXT NOT NULL, budget REAL,"
+            " verbruik REAL NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0,"
+            " aangemaakt TEXT NOT NULL)")
         return verbinding
 
     def _maak_tabel(self) -> None:
@@ -538,7 +545,10 @@ class Handler(BaseHTTPRequestHandler):
         if pad == "/api/sleutels":
             if not self._eist_beheerder():
                 return
-            return self._json({"sleutels": self.lokaal.sleutels.alles()})
+            try:
+                return self._json({"sleutels": self.lokaal.sleutels.alles()})
+            except sqlite3.Error as fout:
+                return self._fout(f"het sleutelbestand is niet te lezen ({fout})", 500)
         if pad.startswith("/v1/"):
             return self.lokaal.stuur_door(self, "GET")
         return self._fout("onbekende route", 404)
@@ -574,6 +584,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.lokaal.maak_sleutel(self._lichaam()))
             except LokaalFout as fout:
                 return self._fout(str(fout), 502)
+            except sqlite3.Error as fout:
+                return self._fout(f"het sleutelbestand is niet te schrijven ({fout})", 500)
         if pad.startswith("/v1/"):
             return self.lokaal.stuur_door(self, "POST")
         return self._fout("onbekende route", 404)
