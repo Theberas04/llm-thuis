@@ -92,7 +92,9 @@ modellen erachter zitten (met een testknop die het model écht aanroept) en welk
 sleutels er zijn — sleutels maken met een budget kan er ook, na inloggen met het
 beheerderswachtwoord.
 
-Download hem bij de [uitgaven](../../releases/latest):
+![De Windows-app](docs/img/bureau.png)
+
+Download hem bij de [uitgaven](https://github.com/Theberas04/llm-thuis/releases/latest):
 
 - **`LLM-thuis-bureau-<versie>-windows.zip`** — dit is de versie die zichzelf
   bijwerkt. Uitpakken en `LLM-thuis.exe` starten; er is geen Python nodig.
