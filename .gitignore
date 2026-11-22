@@ -2,7 +2,14 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-venv/
 frames/
 /tmp/
 *.log
+
+# Bouwsel van de bureaubladapp: het pictogram wordt in de bouwstraat gemaakt, de
+# rest is uitvoer van PyInstaller en hoort niet in de repo.
+bureau/packaging/merk.ico
+bureau/build/
+bureau/dist/
+bureau/*.spec
+version.json

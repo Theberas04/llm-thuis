@@ -7,6 +7,7 @@
 ![Platform](https://img.shields.io/badge/platform-Proxmox%20LXC-2ea3f2)
 ![Gateway](https://img.shields.io/badge/gateway-LiteLLM%20(MIT)-1e73be)
 ![Docker](https://img.shields.io/badge/docker-niet%20nodig-059669)
+![Bureaubladapp](https://img.shields.io/badge/Windows-bureaubladapp-2ea3f2)
 ![Taal](https://img.shields.io/badge/taal-Nederlands-0ea5b7)
 ![Licentie](https://img.shields.io/badge/licentie-alle%20rechten%20voorbehouden-55657f)
 
@@ -41,6 +42,9 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Theberas04/llm-thuis/mai
   beheerderswachtwoord.
 - **Een controlescript dat zegt wat er mis is.** `check-llm-thuis.sh` toetst elke
   laag en zet per bevinding de oplossing erbij — geen gegok.
+- **Een Windows-app erbij.** Status bekijken, modellen testen en sleutels maken
+  vanaf je eigen pc, zonder browser — en die zichzelf bijwerkt vanuit de uitgaven
+  (releases) van deze repo.
 
 ## Schermafbeeldingen
 
@@ -79,6 +83,32 @@ je apps / agent / Hermes
   van Werdens Monitor, testknop, sleutelbeheer, en het doorsturen van `/v1/`.
 - **Geen Docker, geen nginx.** De gateway luistert op loopback, het bord op poort 80
   (met alleen de bevoegdheid om een lage poort te binden, niet als root).
+
+## De bureaubladapp (.exe)
+
+Naast het bord is er een Windows-programma: `LLM-thuis.exe`. Je vult één keer het
+adres van je bord in en daarna zie je in één venster of de gateway leeft, welke
+modellen erachter zitten (met een testknop die het model écht aanroept) en welke
+sleutels er zijn — sleutels maken met een budget kan er ook, na inloggen met het
+beheerderswachtwoord.
+
+Download hem bij de [uitgaven](../../releases/latest):
+
+- **`LLM-thuis-bureau-<versie>-windows.zip`** — dit is de versie die zichzelf
+  bijwerkt. Uitpakken en `LLM-thuis.exe` starten; er is geen Python nodig.
+- **`LLM-thuis-<versie>-exe.exe`** — dezelfde app als één los bestand, voor als je
+  even snel wilt kijken. Dit losse bestand werkt zichzelf niet bij.
+
+**Bijwerken doet de app zelf.** Bij het starten kijkt hij bij de nieuwste uitgave van
+deze repo. Is er een nieuwe versie, dan verschijnt er een knop met het versienummer
+erbij. De app haalt de ZIP op, controleert de vingerafdruk (sha256) uit
+`version.json` en laat daarna een klein hulpbestand de bestanden vervangen zodra het
+programma zelf dicht is — Windows laat een draaiend programma zijn eigen bestanden
+niet overschrijven, vandaar die omweg. Klopt de vingerafdruk niet, dan wordt er niets
+vervangen en blijft de oude versie gewoon werken.
+
+Instellingen staan in `%APPDATA%\LLM-thuis`; het beheerderswachtwoord wordt nooit
+bewaard.
 
 ## Zo gebruik je het
 
@@ -131,9 +161,14 @@ Een model toevoegen of weghalen doe je in `/opt/llm-thuis/config.yaml`; daarna
 ## Proeven
 
 ```bash
-python3 tests/test-bord.py     # 19 proeven: pagina, testknop, sleutelbeheer, doorsturen
-python3 scripts/check-kit.py   # klopt elke lijst in de installatiekit nog?
+python3 tests/test-bord.py            # pagina, testknop, sleutelbeheer, doorsturen
+python3 bureau/tests/test_core.py     # de bureaubladapp: client, versies, bijwerken, pakket
+python3 scripts/check-kit.py          # klopt elke lijst in de installatiekit nog?
 ```
+
+De bureaubladapp wordt bij elke uitgave op een echte Windows-machine gebouwd en
+daar ook door zijn eigen zelftest gekeurd: het ingepakte programma opent het venster,
+toetst de kern en kijkt of de uitgavenlijst te vinden is.
 
 ## Licentie
 

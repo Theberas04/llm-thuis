@@ -1,0 +1,198 @@
+name: Windows-bureaubladapp
+
+# Bouwt de .exe van de bureaubladapp en zet hem als uitgave (release) klaar, zodat
+# hij te downloaden is en de app zichzelf kan bijwerken. Draai handmatig via
+# "Run workflow", of automatisch bij een etiket als v1.0.1.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bureau-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bouw:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Bron ophalen
+        uses: actions/checkout@v4
+
+      - name: Python instellen
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Versie lezen
+        id: versie
+        shell: pwsh
+        run: |
+          $versie = (Get-Content bureau\version.txt -Raw).Trim()
+          if (-not $versie) { throw "bureau\version.txt is leeg" }
+          Write-Host "Versie: $versie"
+          "waarde=$versie" >> $env:GITHUB_OUTPUT
+
+      - name: Proeven van de kern
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python bureau\tests\test_core.py
+          python -m compileall -q bureau
+
+      - name: Bouwen (ZIP-versie en los .exe-bestand)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmd /c bureau\build_windows.bat
+          if ($LASTEXITCODE -ne 0) { throw "de bouw mislukte met code $LASTEXITCODE" }
+
+      # De zelftest van het *ingepakte* programma is het enige bewijs dat de
+      # afgeleverde .exe werkt: hij opent het echte venster, toetst de kern en kijkt
+      # of de uitgavenlijst te vinden is.
+      - name: Zelftest van het ingepakte programma
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis\LLM-thuis.exe"
+          if (!(Test-Path $exe)) { throw "de bouw leverde geen LLM-thuis.exe op" }
+          $report = Join-Path $env:GITHUB_WORKSPACE "zelftest-verslag.json"
+          Remove-Item $report -ErrorAction SilentlyContinue
+
+          # ProcessStartInfo, niet Start-Process -PassThru: die komt nooit terug bij een
+          # vensterprogramma en laat de hele bouw zonder een regel uitvoer stilstaan.
+          $info = New-Object System.Diagnostics.ProcessStartInfo
+          $info.FileName = $exe
+          $info.Arguments = "--selftest `"$report`""
+          $info.WorkingDirectory = Split-Path $exe
+          $info.UseShellExecute = $false
+          $info.RedirectStandardOutput = $true
+          $info.RedirectStandardError = $true
+          $proc = New-Object System.Diagnostics.Process
+          $proc.StartInfo = $info
+          [void]$proc.Start()
+          Write-Host "$(Get-Date -Format o) gestart (pid $($proc.Id)), wachten tot 300s"
+          $deadline = (Get-Date).AddSeconds(300)
+          while (-not $proc.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not $proc.HasExited) {
+            taskkill /PID $proc.Id /T /F | Out-Null
+            throw "de zelftest liep vast; het verslag staat in $report"
+          }
+          $uit = $proc.StandardOutput.ReadToEnd()
+          $fout = $proc.StandardError.ReadToEnd()
+          if ($uit) { Write-Host $uit }
+          if ($fout) { Write-Host $fout }
+          if (!(Test-Path $report)) { throw "de zelftest schreef geen verslag" }
+          $verslag = Get-Content $report -Raw | ConvertFrom-Json
+          Write-Host "Stappen: $($verslag.stappen -join ' -> ')"
+          Write-Host "Fouten: $($verslag.fouten -join ' | ')"
+          if (-not $verslag.ok) { throw "de zelftest meldt een fout: $($verslag.fouten -join ' | ')" }
+          foreach ($stap in @("start", "kern", "bijwerkscript", "pakketcontrole", "instellingen", "venster")) {
+            if ($verslag.stappen -notcontains $stap) { throw "de zelftest kwam niet langs '$stap'" }
+          }
+          if ($proc.ExitCode -ne 0) { throw "de zelftest gaf afsluitcode $($proc.ExitCode)" }
+          Write-Host "Zelftest geslaagd, versie $($verslag.versie), bijwerken mogelijk: $($verslag.bijwerken_mogelijk)"
+
+      - name: Los .exe-bestand kort toetsen
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis-alleen.exe"
+          if (!(Test-Path $exe)) { throw "de bouw leverde geen los .exe-bestand op" }
+          $uit = & $exe --versie
+          Write-Host "los bestand meldt versie: $uit"
+          if ("$uit".Trim() -ne "${{ steps.versie.outputs.waarde }}") {
+            throw "het losse bestand meldt versie '$uit' in plaats van '${{ steps.versie.outputs.waarde }}'"
+          }
+
+      # Beeld van het echte venster, op een echte Windows-machine. Lukt dit niet
+      # (bijvoorbeeld omdat de bouwmachine geen bureaublad heeft), dan mag dat de
+      # bouw niet stoppen: het programma wordt al door de zelftest gekeurd.
+      - name: Schermafbeelding van het venster
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis\LLM-thuis.exe"
+          $info = New-Object System.Diagnostics.ProcessStartInfo
+          $info.FileName = $exe
+          $info.Arguments = "--basis http://192.168.1.100"
+          $info.WorkingDirectory = Split-Path $exe
+          $info.UseShellExecute = $false
+          $proc = [System.Diagnostics.Process]::Start($info)
+          Start-Sleep -Seconds 10
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $beeld = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $beeld.Width, $beeld.Height
+          $teken = [System.Drawing.Graphics]::FromImage($bmp)
+          $teken.CopyFromScreen($beeld.Location, [System.Drawing.Point]::Empty, $beeld.Size)
+          $bmp.Save((Join-Path $env:GITHUB_WORKSPACE "app-venster.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+          $teken.Dispose()
+          $bmp.Dispose()
+          if (-not $proc.HasExited) { taskkill /PID $proc.Id /T /F | Out-Null }
+          Write-Host "Schermafbeelding gemaakt van $($beeld.Width)x$($beeld.Height)."
+
+      - name: Schermafbeelding bewaren
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-venster
+          path: app-venster.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Pakket en manifest maken
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $versie = "${{ steps.versie.outputs.waarde }}"
+          $app = Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis"
+          $naam = "LLM-thuis-bureau-$versie-windows.zip"
+          $zip = Join-Path $env:GITHUB_WORKSPACE $naam
+          Compress-Archive -Path (Join-Path $app "*") -DestinationPath $zip -CompressionLevel Optimal -Force
+
+          # Het losse bestand krijgt ook de versie in de naam, zodat naast elkaar
+          # gedownloade versies niet door elkaar te halen zijn.
+          $los = Join-Path $env:GITHUB_WORKSPACE "LLM-thuis-$versie-exe.exe"
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "dist\LLM-thuis-alleen.exe") $los -Force
+
+          python bureau\scripts\maak-manifest.py $zip $los
+          if ($LASTEXITCODE -ne 0) { throw "het manifest kon niet worden gemaakt" }
+          Get-Content version.json -Raw | Write-Host
+
+      - name: Pakket keuren met de eigen controles
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $versie = "${{ steps.versie.outputs.waarde }}"
+          python -c "import sys; sys.path.insert(0, 'bureau'); from pathlib import Path; from llmthuis_bureau import core; fouten = core.controleer_pakket(Path('LLM-thuis-bureau-%s-windows.zip' % '$versie'), 'LLM-thuis.exe'); print('keuring:', fouten or 'goed'); raise SystemExit(1 if fouten else 0)"
+
+      - name: Uitgave publiceren
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versie = "${{ steps.versie.outputs.waarde }}"
+          $tag = "v$versie"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "LLM-thuis bureaubladapp $versie" --notes "Windows-app voor LLM-thuis: status, modellen testen en sleutels beheren vanaf je pc. Download ``LLM-thuis-bureau-$versie-windows.zip``, pak hem uit en start LLM-thuis.exe. De app werkt zichzelf bij vanuit deze uitgave; ``LLM-thuis-$versie-exe.exe`` is dezelfde app als één los bestand (werkt niet bij zichzelf)." --latest
+            if ($LASTEXITCODE -ne 0) { throw "de uitgave kon niet worden aangemaakt" }
+          }
+          gh release upload $tag "LLM-thuis-bureau-$versie-windows.zip" --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "de ZIP kon niet worden geüpload" }
+          gh release upload $tag "LLM-thuis-$versie-exe.exe" --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "het losse .exe-bestand kon niet worden geüpload" }
+          gh release upload $tag version.json --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "version.json kon niet worden geüpload" }
+          Write-Host "Uitgave $tag staat klaar."
